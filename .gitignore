@@ -1,0 +1,36 @@
+# Байтовое кэширование Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Окружение и зависимости
+venv/
+.venv/
+env/
+build/
+dist/
+*.egg-info/
+
+
+# Логи (из вашего кода logs_dir)
+logs/
+*.log
+
+# Тесты и покрытие
+.pytest_cache/
+.coverage
+!htmlcov/
+htmlcov/*
+!htmlcov/index.html
+nosetests.xml
+coverage.xml
+
+# Настройки IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Конфиденциальные данные
+.env
+src/config.py
