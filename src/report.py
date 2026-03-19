@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import datetime, timedelta
 from typing import Any, Callable, Optional, Union
-
+import json
 import pandas as pd
 
 from src.utils import load_excel_data
@@ -23,15 +23,21 @@ logging.basicConfig(
 def report_to_file(filename: Optional[Union[str, Callable]] = None) -> Callable:
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> str:
             result_df = func(*args, **kwargs)
-            if result_df is None or result_df.empty:
-                return result_df
-            target_file = filename if isinstance(filename, str) else f"{func.__name__}.json"
-            result_df.to_json(target_file, orient="records", force_ascii=False, indent=4, date_format="iso")
-            logging.info(f"Отчет '{func.__name__}' сохранен в файл: {target_file}")
-            return result_df
 
+            if result_df is None or result_df.empty:
+                return json.dumps([])
+
+            data_dict = result_df.to_dict(orient="records")
+
+            json_result = json.dumps(data_dict, ensure_ascii=False, indent=4)
+
+            target_file = filename if isinstance(filename, str) else f"{func.__name__}.json"
+            with open(target_file, "w", encoding="utf-8") as f:
+                f.write(json_result)
+            logging.info(f"Отчет '{func.__name__}' сохранен в файл: {target_file}")
+            return json_result
         return wrapper
 
     if callable(filename):
@@ -39,7 +45,6 @@ def report_to_file(filename: Optional[Union[str, Callable]] = None) -> Callable:
         filename = None
         return decorator(func_to_decorate)
     return decorator
-
 
 @report_to_file
 def spending_by_category(transactions: pd.DataFrame, category: str, date: Optional[str] = None) -> pd.DataFrame:
@@ -59,6 +64,7 @@ def spending_by_category(transactions: pd.DataFrame, category: str, date: Option
         & (df["Дата платежа"] <= end_date)
         & (df["Дата платежа"] >= start_date)
     ]
+    report_df["Дата платежа"] = report_df["Дата платежа"].dt.strftime('%Y-%m-%d')
     return report_df
 
 

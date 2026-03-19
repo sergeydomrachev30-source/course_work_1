@@ -33,4 +33,3 @@ coverage.xml
 
 # Конфиденциальные данные
 .env
-src/config.py

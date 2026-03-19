@@ -5,8 +5,8 @@ from typing import Any, cast
 
 import pandas as pd
 import requests
-
-# from src.config import api_key
+import json
+from src.config import api_key
 
 logs_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs"))
 log_file_path = os.path.join(logs_dir, "app.log")
@@ -63,9 +63,8 @@ def process_card_data(card_info: pd.DataFrame, cashback_rate: float = 0.01) -> t
     """
     if card_info.empty:
         logging.warning("Данные карты пустые.")
-        return None, 0.0, 0.0  # Используем float (0.0 вместо 0)
+        return None, 0.0, 0.0
 
-    # Приводим к строке и float явно, чтобы MyPy не сомневался
     last_four = str(card_info["Номер карты"].iloc[0][1:])
     total_spent = round(float(card_info.loc[card_info["Сумма операции"] < 0, "Сумма операции"].sum()), 2)
     cashback = round(abs(total_spent * cashback_rate), 2)
@@ -84,15 +83,15 @@ def get_top_5_transactions(data: pd.DataFrame) -> pd.DataFrame:
     return top_5_transactions
 
 
-def get_currency_rate(api_key: str | None) -> dict[str, Any]:
-    if not api_key:
+def get_currency_rate(api: str | None) -> dict[str, Any]:
+    if not api:
         logging.error("API ключ не предоставлен")
         return {}
-    url = f"https://api.apilayer.com/exchangerates_data/latest?apikey={api_key}"
+    url = f"https://api.apilayer.com/exchangerates_data/latest?apikey={api}"
     response = requests.get(url)
     if response.status_code == 200:
         logging.info("Курсы валют успешно получены.")
-        data = cast(dict[str, Any], response.json())
+        data = cast(dict[str, Any], json.loads(response.text))
         return data
     else:
         logging.error(f"API запрос не удался, статус код: {response.status_code}")

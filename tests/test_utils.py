@@ -1,6 +1,6 @@
 from datetime import datetime
 from unittest.mock import Mock, patch
-
+import json
 import pandas as pd
 import pytest
 
@@ -72,13 +72,11 @@ def test_get_top_5_transactions_with_mock(mock_read_excel):
     assert len(result) == 5
     assert result.iloc[0]["Сумма операции"] == 500
 
-
-# Тест для функции get_currency_rate
 @patch("src.utils.requests.get")
 def test_get_currency_rate(mock_get):
     mock_response = mock_get.return_value
     mock_response.status_code = 200
-    mock_response.json.return_value = {"rates": {"USD": 74.0}}
+    mock_response.text = json.dumps({"rates": {"USD": 74.0}})
     result = get_currency_rate("dummy_key")
     assert result["rates"]["USD"] == 74.0
 

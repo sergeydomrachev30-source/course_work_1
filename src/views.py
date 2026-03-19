@@ -1,4 +1,4 @@
-# import json
+import json
 import logging
 import os
 from datetime import datetime, timedelta
@@ -13,7 +13,7 @@ logs_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs")
 log_file_path = os.path.join(logs_dir, "app.log")
 
 
-def main_page_function(date_time_str: str) -> dict:
+def main_page_function(date_time_str: str) -> str:
     """
     Функция принимает на вход строку с датой и временем в формате YYYY-MM-DD HH:MM:SS
     и возвращающую JSON-ответ со следующими данными: приветствие, по каждой карте: последние 4 цифры карты,
@@ -23,17 +23,19 @@ def main_page_function(date_time_str: str) -> dict:
     transaction_df = load_excel_data("../data/operations.xlsx")
     if transaction_df.empty:
         logging.warning("Файл пуст или не найден.")
-        return {}
-    # Получаем приветствие
+        return json.dumps({}, ensure_ascii=False)
+
     greeting = say_hello()
     if "Номер карты" not in transaction_df.columns:
         logging.error("В данных нет колонки 'Номер карты'")
-        return {"greeting": greeting, "cards": [], "top_transactions": [], "currency_data": [], "stock_prices": []}
+        error_response = {"greeting": greeting, "cards": [], "top_transactions": [], "currency_data": [],
+                          "stock_prices": []}
+        return json.dumps(error_response, ensure_ascii=False, indent=4)
 
     cards_data = []
     for card_number in transaction_df["Номер карты"].unique():
         card_data = transaction_df[transaction_df["Номер карты"] == card_number]
-        if not card_data.empty:  # Проверка на пустоту данных
+        if not card_data.empty:
             last_four, total_spent, cashback = process_card_data(card_data)
             cards_data.append({"last_digits": last_four, "total_spent": total_spent, "cashback": cashback})
         else:
@@ -61,10 +63,10 @@ def main_page_function(date_time_str: str) -> dict:
         "currency_data": currency_data,
         "stock_prices": stock_data,
     }
-    return response
+    return json.dumps(response, ensure_ascii=False, indent=4)
 
 
-def events_page_function(date_str: str, range_type: str = "M") -> dict:
+def events_page_function(date_str: str, range_type: str = "M") -> str:
     """
     Основная функция для страницы 'События'. Собирает отчет по расходам,
     переводам, доходам, валютам и акциям за выбранный период.
@@ -72,7 +74,7 @@ def events_page_function(date_str: str, range_type: str = "M") -> dict:
     transaction_df = load_excel_data("../data/operations.xlsx")
     if transaction_df.empty:
         logging.warning("Файл пуст или не найден.")
-        return {}
+        return json.dumps({}, ensure_ascii=False)
 
     transaction_df["Дата платежа"] = pd.to_datetime(transaction_df["Дата платежа"], dayfirst=True)
 
@@ -126,4 +128,4 @@ def events_page_function(date_str: str, range_type: str = "M") -> dict:
         "stock_prices": stock_data,
     }
 
-    return response
+    return json.dumps(response, ensure_ascii=False, indent=4)

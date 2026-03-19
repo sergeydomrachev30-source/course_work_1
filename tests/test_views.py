@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 import pandas as pd
@@ -36,7 +37,8 @@ def test_main_page_function_integration(mock_load, mock_hello, mock_card, mock_t
     mock_curr.return_value = {"rates": {"USD": 75.0}}
     mock_stocks.return_value = [{"name": "AAPL", "price": 150.0}]
 
-    result = main_page_function("2021-12-21 12:00:00")
+    response_json = main_page_function("2021-12-21 12:00:00")
+    result = json.loads(response_json)
 
     assert result["greeting"] == "Добрый день"
     assert result["cards"][0]["last_digits"] == "1111"
@@ -59,7 +61,7 @@ def test_events_page_function_integration(mock_load, mock_exp, mock_inc, mock_cu
     mock_stocks.return_value = [{"name": "MSFT", "price": 300.0}]
 
     # Тестируем диапазон 'M' (Месяц)
-    result = events_page_function("2021-12-21", range_type="M")
+    result = json.loads(events_page_function("2021-12-21", range_type="M"))
 
     assert result["expenses"]["date_range"]["start"] == "01.12.2021"
     assert result["expenses"]["total_amount"] == 1500
@@ -82,7 +84,7 @@ def test_events_page_invalid_range(mock_load):
 @patch("src.views.load_excel_data")
 def test_main_page_empty_file(mock_load):
     mock_load.return_value = pd.DataFrame()
-    assert main_page_function("2021-12-21") == {}
+    assert json.loads(main_page_function("2021-12-21")) == {}
 
 
 # 2. Тест на отсутствие колонки 'Номер карты'
@@ -91,7 +93,7 @@ def test_main_page_empty_file(mock_load):
 def test_main_page_no_card_column(mock_hello, mock_load):
     mock_load.return_value = pd.DataFrame({"Дата": ["2021-12-21"]})
     mock_hello.return_value = "Привет"
-    result = main_page_function("2021-12-21 12:00:00")
+    result = json.loads(main_page_function("2021-12-21 12:00:00"))
     assert result["greeting"] == "Привет"
     assert result["cards"] == []
 
@@ -110,7 +112,7 @@ def test_main_page_api_failure(mock_load, mock_card, mock_top, mock_curr, mock_s
     mock_curr.side_effect = Exception("API Down")
     mock_stocks.side_effect = Exception("MOEX Down")
 
-    result = main_page_function("2021-12-21 12:00:00")
+    result = json.loads(main_page_function("2021-12-21 12:00:00"))
     assert result["currency_data"] == []
     assert result["stock_prices"] == []
 
@@ -132,7 +134,7 @@ def test_events_ranges(mock_load, mock_exp, mock_inc, range_type, expected_start
     mock_exp.return_value = {"expenses": {}, "transfers_and_cash": []}
     mock_inc.return_value = {}
 
-    result = events_page_function("2021-12-21", range_type=range_type)
+    result = json.loads(events_page_function("2021-12-21", range_type=range_type))
     assert result["expenses"]["date_range"]["start"] == expected_start
 
 
