@@ -1,58 +1,146 @@
-import pytest
+import json
 from unittest.mock import patch
+
 import pandas as pd
-from src.views import main_page_function
-import logging
-from datetime import datetime
+import pytest
 
-logging.basicConfig(level=logging.DEBUG)
+from src.views import events_page_function, main_page_function
 
-# Фикстура для данных о транзакциях
+
 @pytest.fixture
-def transaction_data_fixture():
-    return pd.DataFrame({
-        'Номер карты': ['1234', '5678'],
-        'Сумма операции': [1000.00, 2000.00],
-        'Описание': ['Транзакция 1', 'Транзакция 2']
-    })
+def mock_df():
+    """Общий DataFrame для тестов."""
+    return pd.DataFrame(
+        {
+            "Дата платежа": ["20.12.2021", "21.12.2021"],
+            "Номер карты": ["*1111", "*1111"],
+            "Сумма операции": [-1500.0, 5000.0],
+            "Категория": ["Супермаркеты", "Зарплата"],
+            "Описание": ["Пятерочка", "Перевод"],
+        }
+    )
 
-@pytest.mark.parametrize("date_time_str, expected_greeting", [
-    ('2021-12-21 06:00:00', "Доброе утро!"),
-    ('2021-12-21 14:00:00', "Добрый день!"),
-    ('2021-12-21 19:00:00', "Добрый вечер!"),
-    ('2021-12-21 02:00:00', "Доброй ночи!")
-])
-@patch('src.utils.datetime')  # Путь к модулю datetime, где используется
-@patch('src.views.load_excel_data')
-@patch('src.utils.process_card_data')
-@patch('src.utils.get_currency_rate')
-@patch('src.utils.get_sp500_stocks')
-@patch('src.utils.say_hello')
-@patch('src.utils.get_top_5_transactions')
-def test_main_page_function(mock_get_top_5_transactions, mock_say_hello,
-                            mock_get_sp500_stocks, mock_get_currency_rate,
-                            mock_process_card_data, mock_load_excel_data,
-                            mock_datetime,  # Добавляем мок
-                            transaction_data_fixture,
-                            date_time_str, expected_greeting):
-    # Установка времени для тестов
-    mock_datetime.now.return_value = datetime.strptime(date_time_str, '%Y-%m-%d %H:%M:%S')
 
+# Тест для Главной страницы
+@patch("src.views.get_sp500_stocks")
+@patch("src.views.get_currency_rate")
+@patch("src.views.get_top_5_transactions")
+@patch("src.views.process_card_data")
+@patch("src.views.say_hello")
+@patch("src.views.load_excel_data")
+def test_main_page_function_integration(mock_load, mock_hello, mock_card, mock_top, mock_curr, mock_stocks, mock_df):
     # Настройка моков
-    mock_load_excel_data.return_value = transaction_data_fixture
-    mock_say_hello.return_value = expected_greeting
-    mock_get_top_5_transactions.return_value = transaction_data_fixture.head(5)
-    mock_get_currency_rate.return_value = {"rates": {"USD": 74.0}}
-    mock_get_sp500_stocks.return_value = [{"stock": "AAPL", "price": 150.12}]
-    mock_process_card_data.return_value = ("1234", 1000.0, 10.0)
+    mock_load.return_value = mock_df
+    mock_hello.return_value = "Добрый день"
+    mock_card.return_value = ("1111", -1500.0, 15.0)
+    mock_top.return_value = mock_df.head(1)
+    mock_curr.return_value = {"rates": {"USD": 75.0}}
+    mock_stocks.return_value = [{"name": "AAPL", "price": 150.0}]
 
-    result = main_page_function(date_time_str)
+    response_json = main_page_function("2021-12-21 12:00:00")
+    result = json.loads(response_json)
 
-    # Выполнение проверок
-    assert result['greeting'] == expected_greeting
-    assert len(result['cards']) == len(transaction_data_fixture['Номер карты'].unique())
-    assert len(result['top_transactions']) == 2  # в зависимости от данных фикстуры
-    # Проверка курса валют для USD с округлением
-    usd_rate = next((item['rate'] for item in result['currency_data'] if item['currency'] == 'USD'), None)
-    assert round(usd_rate, 2) == 74.0
-    assert result['stock_prices'][0]['price'] == 150.12
+    assert result["greeting"] == "Добрый день"
+    assert result["cards"][0]["last_digits"] == "1111"
+    assert result["top_transactions"][0]["Описание"] == "Пятерочка"
+    assert result["currency_data"][0]["currency"] == "USD"
+
+
+# Тест для страницы Событий
+@patch("src.views.get_sp500_stocks")
+@patch("src.views.get_currency_rate")
+@patch("src.views.calculate_incomes")
+@patch("src.views.calculate_expenses_transfers")
+@patch("src.views.load_excel_data")
+def test_events_page_function_integration(mock_load, mock_exp, mock_inc, mock_curr, mock_stocks, mock_df):
+    # Настройка моков
+    mock_load.return_value = mock_df
+    mock_exp.return_value = {"expenses": {"total_amount": 1500, "main": []}, "transfers_and_cash": []}
+    mock_inc.return_value = {"total_amount": 5000, "main": []}
+    mock_curr.return_value = {"rates": {"EUR": 85.0}}
+    mock_stocks.return_value = [{"name": "MSFT", "price": 300.0}]
+
+    # Тестируем диапазон 'M' (Месяц)
+    result = json.loads(events_page_function("2021-12-21", range_type="M"))
+
+    assert result["expenses"]["date_range"]["start"] == "01.12.2021"
+    assert result["expenses"]["total_amount"] == 1500
+    assert result["income"]["total_amount"] == 5000
+    assert result["currency_data"][0]["currency"] == "EUR"
+    assert result["stock_prices"][0]["name"] == "MSFT"
+
+
+# Дополнительный тест на ошибку в Событиях
+@patch("src.views.load_excel_data")
+def test_events_page_invalid_range(mock_load):
+    # Имитируем, что файл НЕ пустой, чтобы функция пошла дальше
+    mock_load.return_value = pd.DataFrame({"Дата платежа": ["20.12.2021"], "Номер карты": ["*1111"]})
+
+    with pytest.raises(ValueError, match="Некорректный диапазон данных"):
+        events_page_function("2021-12-21", range_type="INVALID")
+
+
+# 1. Тест на пустой файл (покрывает 'if transaction_df.empty')
+@patch("src.views.load_excel_data")
+def test_main_page_empty_file(mock_load):
+    mock_load.return_value = pd.DataFrame()
+    assert json.loads(main_page_function("2021-12-21")) == {}
+
+
+# 2. Тест на отсутствие колонки 'Номер карты'
+@patch("src.views.load_excel_data")
+@patch("src.views.say_hello")
+def test_main_page_no_card_column(mock_hello, mock_load):
+    mock_load.return_value = pd.DataFrame({"Дата": ["2021-12-21"]})
+    mock_hello.return_value = "Привет"
+    result = json.loads(main_page_function("2021-12-21 12:00:00"))
+    assert result["greeting"] == "Привет"
+    assert result["cards"] == []
+
+
+# 3. Тест на ошибки API (покрывает блоки 'except Exception')
+@patch("src.views.get_sp500_stocks")
+@patch("src.views.get_currency_rate")
+@patch("src.views.get_top_5_transactions")
+@patch("src.views.process_card_data")
+@patch("src.views.load_excel_data")
+def test_main_page_api_failure(mock_load, mock_card, mock_top, mock_curr, mock_stocks):
+    mock_load.return_value = pd.DataFrame({"Номер карты": ["*1111"]})
+    mock_card.return_value = ("1111", 0, 0)
+    mock_top.return_value = pd.DataFrame()
+    # Имитируем сбой API
+    mock_curr.side_effect = Exception("API Down")
+    mock_stocks.side_effect = Exception("MOEX Down")
+
+    result = json.loads(main_page_function("2021-12-21 12:00:00"))
+    assert result["currency_data"] == []
+    assert result["stock_prices"] == []
+
+
+# 4. Тесты на разные диапазоны дат (покрывает ветки 'W', 'Y', 'ALL')
+@patch("src.views.calculate_incomes")
+@patch("src.views.calculate_expenses_transfers")
+@patch("src.views.load_excel_data")
+@pytest.mark.parametrize(
+    "range_type, expected_start",
+    [
+        ("W", "20.12.2021"),  # Понедельник недели для 21.12.2021
+        ("Y", "01.01.2021"),  # Начало года
+        ("ALL", "01.01.2018"),  # Константа из кода
+    ],
+)
+def test_events_ranges(mock_load, mock_exp, mock_inc, range_type, expected_start):
+    mock_load.return_value = pd.DataFrame({"Дата платежа": ["21.12.2021"], "Номер карты": ["*1"]})
+    mock_exp.return_value = {"expenses": {}, "transfers_and_cash": []}
+    mock_inc.return_value = {}
+
+    result = json.loads(events_page_function("2021-12-21", range_type=range_type))
+    assert result["expenses"]["date_range"]["start"] == expected_start
+
+
+# 5. Исправленный тест на некорректный диапазон
+@patch("src.views.load_excel_data")
+def test_events_invalid_range(mock_load):
+    mock_load.return_value = pd.DataFrame({"Дата платежа": ["21.12.2021"]})
+    with pytest.raises(ValueError, match="Некорректный диапазон данных"):
+        events_page_function("2021-12-21", range_type="UNKNOWN")
